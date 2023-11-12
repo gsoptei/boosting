@@ -1,12 +1,15 @@
 import os
 import pyreadr as pr
-# from hyperopt import STATUS_OK, Trials, fmin, hp, tpe
 from scipy.stats import uniform, randint
 
 # Define variables
 WORK_DIR = os.getcwd()
 DATA_FILE = pr.read_r('/home/gergeli/Asztal/Suli/Lisbon/Datasets/ppe_qu_20231010.R')
+# MODEL = '/home/gergeli/jupyter_dir/machineLearning/Modeling/xgboost_test.json'
+FILE_PATH = '/home/gergeli/jupyter_dir/machineLearning/Modeling/'
 COLUMNS_TO_DROP = ['OBJECTID',
+                   'X',
+                   'Y',
                    'AI',
                    'BIO1', 
                    'BIO10', 
@@ -46,29 +49,26 @@ COLUMNS_TO_DROP = ['OBJECTID',
                    'RSLOPE', 
                    'SOSD', 
                    'SOSV', 
-                   'TPROD', 
-                   'Area'
+                   'TPROD',
+                   'pp_tot',
+                   'ev_bs',
+                   'p_ve',
+                   'ss_runoff',
+                   'ev_t',
+                   'surf_sol_rad',
+                   'surf_therm_rad',
+                   'dew_temp',
+                   'temp',
+                   'soil_temp_l1',
+                   'soil_temp_l2',
+                   'vol_soil_water_l1',
+                   'vol_soil_water_l2'
 ]
-
 # Feature labels for plotting -- better readibility
-LABELS = ['X',
-          'Y',
-          'pt_dem',
+# Matching number of labels and columns or else plotting won't work
+LABELS = ['pt_dem',
           'pt_slope',
-          'pt_psr',
-          'pp_tot',
-          'ev_bs',
-          'p_ve',
-          'ss_runoff',
-          'ev_t',
-          'surf_sol_rad',
-          'surf_therm_rad',
-          'dew_temp',
-          'temp',
-          'soil_temp_l1',
-          'soil_temp_l2',
-          'vol_soil_water_l1',
-          'vol_soil_water_l2',
+          'pt_psr',          
           'bio_01',
           'bio_02',
           'bio_03',
@@ -103,6 +103,7 @@ LABELS = ['X',
           'pH_H2O',
           'pH_H2O_CaCl',
           'P',
+          'Area',
           'Perc_Evergreen',
           'Perc_Deciduous',
           'Perc_Unknown',
@@ -123,3 +124,12 @@ PARAMS = {
     "n_estimators": randint(100, 150), # default 100
     "subsample": uniform(0.6, 0.4),
 }
+
+# Create list of models
+MODELS = []
+# Save predictions
+PREDICTIONS = []
+
+ITERATIONS = [5, 10, 100, 200, 400]
+
+CV = [5, 10]

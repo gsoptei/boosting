@@ -1,11 +1,12 @@
 from settings import *
-import utils as ut
-from utils import final_model, plot_final_results
+from utils import create_model, predict_sprod, plot_final_results
 
 
 def main():
-    model = ut.final_model
-    return model
+    create_model()
+    plot_final_results(MODELS)
+    sprod = predict_sprod(MODELS)
+    return sprod
 
-if __name__ == '__name__':
+if __name__ == '__main__':
     main()

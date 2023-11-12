@@ -15,7 +15,10 @@ from scipy.stats import uniform, randint
 from collections import namedtuple
 from hyperopt import STATUS_OK, Trials, fmin, hp, tpe
 
-# SAVE MODEL AS JSON
+# TODO #3: CALCULATE AND SAVE RESIDUALS
+
+def display_scores(scores):
+    print("Scores: {0}\nMean: {1:.3f}\nStd: {2:.3f}".format(scores, np.mean(scores), np.std(scores)))
 
 def plot_tree_custom(xgb_model, filename, rankdir='UT'):
     """
@@ -25,8 +28,6 @@ def plot_tree_custom(xgb_model, filename, rankdir='UT'):
     :param rankdir: direction of the tree: default Top-Down (UT), accepts:'LR' for left-to-right tree
     :return:
     """
-    # Works for Classification with early stopping
-    # gvz = xgb.to_graphviz(xgb_model, num_trees=xgb_model.best_iteration, rankdir=rankdir)
     # for regression, without early stopping
     gvz = xgb.to_graphviz(xgb_model, rankdir=rankdir)
     _, file_extension = os.path.splitext(filename)
@@ -36,32 +37,39 @@ def plot_tree_custom(xgb_model, filename, rankdir='UT'):
     with open(full_filename, 'wb') as f:
         f.write(data)
 
-def plot_final_results(model):
+def plot_final_results(models):
 
-    matplotlib.use('agg')
-    fig, ax = plt.subplots(figsize=(10, 20))
+    X, y = vals[0], vals[1]
+        
+    for k, model in enumerate(models):
+        print(f"Plotting {model}")
+        matplotlib.use('agg')
+        fig, ax = plt.subplots(figsize=(10, 20))
 
-    model = model
-    # Works for Classification with early stopping
-    # model.fit(vals[2], vals[4], early_stopping_rounds=5, eval_set=[(vals[3], vals[5])])
-    # for regression, without early stopping
-    model.fit(vals[0],vals[1])
-    # xgb_model.fit(X_train, y_train, early_stopping_rounds=5, eval_set=[(X_test, y_test)])
+        model_to_plot = xgb.XGBRegressor()
+        model_to_plot.load_model(FILE_PATH + model)
+        model_to_plot.fit(X, y)
 
-    sorted_features = sorted(model.feature_importances_)
-    labels_ordered = [x for _, x in sorted(zip(model.feature_importances_, LABELS))]
+        sorted_features = sorted(model_to_plot.feature_importances_)
+        labels_ordered = [x for _, x in sorted(zip(model_to_plot.feature_importances_, LABELS))]
 
-    # xgb.plot_importance(model, ax=ax).figure.savefig('xgb_test_features.png')
-    # plt.barh(list(LABELS), model.feature_importances_)
-    plt.barh(labels_ordered, sorted_features)
-    plt.savefig('xgb_test_features.png')
-    
-    print('Feature order saved as xgb_test_features.png')
-    plot_tree_custom(model, 'xgb_tree_test.jpeg')
-    print('Tree saved as xgb_tree_test.jpg')
+        # custom plotting for feature importance
+        plt.barh(labels_ordered, sorted_features)
+        plt.savefig('xgb_features_model_%d.png' %((k) + 1))
+
+        # plot feature importance using the method from xgb
+        xgb.plot_importance(model_to_plot, ax=ax, max_num_features=15).figure.savefig('xgb_feature_importance_%d.png' %((k) + 1))
+
+
+        print('Feature importance saved as xgb_features_model_%d.png' %((k) + 1))
+        # plot trees
+        plot_tree_custom(model_to_plot, 'xgb_tree_model_%d.jpeg' %((k) + 1))
+        print('Tree saved as xgb_tree_model_%d.jpg' %((k) + 1))
+
 
 
 def report_best_scores(results, n_top=3):
+    param_list = []
     for i in range(1, n_top + 1):
         candidates = np.flatnonzero(results['rank_test_score'] == i)
         for candidate in candidates:
@@ -72,7 +80,9 @@ def report_best_scores(results, n_top=3):
             print("Parameters: {0}".format(results['params'][candidate]))
             print("")
             hyperparams = results['params'][candidate]
-            return hyperparams
+            param_list.append(hyperparams)
+    return param_list
+
 
 def convert_to_dataframe(r_data):
     
@@ -86,7 +96,6 @@ def perform_subsetting(get_subset=True, func=convert_to_dataframe):
     
     # drop unwanted columns
     main_dataframe = func(DATA_FILE).drop(COLUMNS_TO_DROP, axis=1)
-    # print(main_dataframe.columns)
     X = main_dataframe.drop('SPROD', axis=1).to_numpy()
     y = main_dataframe.SPROD.to_numpy()
     
@@ -94,36 +103,82 @@ def perform_subsetting(get_subset=True, func=convert_to_dataframe):
     if get_subset:
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.3, random_state = 0)
 
-    return X, y, X_train, X_test, y_train, y_test
+    return X, y, X_train, X_test, y_train, y_test, main_dataframe
+
 
 def search_hyperparams(params=PARAMS):
 
     global vals
     vals = perform_subsetting()
     X, y = vals[0], vals[1]
+    hyperparams = []
 
     xgb_model = xgb.XGBRegressor()
     
-    # change number of iterations!!!!
-    search = RandomizedSearchCV(xgb_model, param_distributions=params,random_state=42, n_iter=10, cv=3, 
-    verbose=1, n_jobs=1, return_train_score=True
-    )
+    # perform cross validation and boosting
+    for i in ITERATIONS:
+        for j in CV:
+            search = RandomizedSearchCV(xgb_model, param_distributions=params,random_state=42, n_iter=i, cv=j, 
+            verbose=1, n_jobs=1, return_train_score=True
+            )
+            search.fit(X, y)
+            # hyperparams = report_best_scores(search.cv_results_, 1)
+            hyperparams.append(report_best_scores(search.cv_results_, 1)) 
 
-    search.fit(X, y)
-
-    hyperparams = report_best_scores(search.cv_results_, 1)
+    print(f"Number of parameters: {len(hyperparams)}, parameters: {hyperparams}")
     return hyperparams, vals
-    
 
 def create_model(func=search_hyperparams):
 
-    params = func()[0]
-    model = xgb.XGBRegressor(**params)
-    plot_final_results(model)
-    model.save_model('xgboost_test.json')
-    print("Model saved as 'xgboost_test.json'")
-    return model
+    params, vals = func()
+    X, y = vals[0], vals[1]
+    print(f"The number of hyperparameters is: {len(params)}")
+    errors = {}
+    
+    for k, param in enumerate(params):
+        print(f"Model will be created with the following hyperparameters: {param[0]}")
+        model = xgb.XGBRegressor(**param[0])
+        model.fit(X, y)
+        y_pred = model.predict(X)
+        mse = mean_squared_error(y, y_pred)
+        model.save_model('xgboost_test_%d.json' %((k) + 1)) 
+        MODELS.append('xgboost_test_%d.json' %((k) + 1))
+        print("Model saved as 'xgboost_test_%d.json'" %((k) + 1))
+        print("")
+        print(np.sqrt(mse))
 
-final_model = create_model()
+        # add model rmse to a dictionary
+        errors['xgboost_test_%d.json' %((k) + 1)] = (np.sqrt(mse))
 
+        print(f"MODEL CREATION FINISHED WITH PARAMETERS: {param}")
+        print("")
+    
+    print(f"These are the models: {MODELS}")
+    return MODELS, errors
 
+def predict_sprod(models):
+
+    global vals
+    X, X_train, X_test, y_train, y_test, final_dataset = vals[0], vals[2], vals[3], vals[4], vals[5], vals[6]
+
+    for model in models:
+        model_predict = xgb.XGBRegressor()
+        model_predict.load_model(FILE_PATH + model)
+        model_predict.fit(X_train, y_train, 
+                          eval_set=[(X_train, y_train), (X_test, y_test)], verbose=True
+        )
+        y_pred = model_predict.predict(X)
+
+        print(f'This is the prediction of SPROD: {y_pred} for the model named {model}')
+        print(f'SPROD PREDICTION FINISHED FOR {model}')
+        PREDICTIONS.append(y_pred)
+        # vals[6]["SPROD_pred_%d" %(models.index(model) + 1)] = y_pred
+
+        # append SPROD prediciton to dataframe
+        final_dataset["SPROD_pred_%d" %(models.index(model) + 1)] = y_pred
+
+    # vals[6].to_excel('output.xlsx', index=False)
+    # save final dataframe to excel
+    final_dataset.to_excel('output.xlsx', index=False)
+    print(len(PREDICTIONS))
+    return PREDICTIONS
