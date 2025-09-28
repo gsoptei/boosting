@@ -4,9 +4,9 @@ from scipy.stats import uniform, randint
 
 # Define variables
 WORK_DIR = os.getcwd()
-DATA_FILE = pr.read_r('/home/gergeli/Asztal/Suli/Lisbon/Datasets/ppe_qu_20231010.R')
+DATA_FILE = pr.read_r('path/to/your/r_datafile')
 # MODEL = '/home/gergeli/jupyter_dir/machineLearning/Modeling/xgboost_test.json'
-FILE_PATH = '/home/gergeli/jupyter_dir/machineLearning/Modeling/'
+FILE_PATH = 'path/to/your/file'
 COLUMNS_TO_DROP = ['OBJECTID',
                    'X',
                    'Y',
